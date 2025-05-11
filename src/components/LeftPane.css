@@ -1,0 +1,98 @@
+.left-pane {
+  position: relative;
+  width: 250px;
+  height: 100%;
+  background-color: #f5f5f5;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: row;
+}
+
+.pane-content {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+.resize-handle {
+  width: 10px;
+  height: 100%;
+  background-color: #bbb;
+  cursor: ew-resize;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transition: background-color 0.2s;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resize-handle::after {
+  content: '';
+  height: 40px;
+  width: 2px;
+  background-color: #666;
+  border-radius: 1px;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background-color: #4caf50;
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  background-color: white;
+}
+
+.pane-section {
+  margin-bottom: 20px;
+}
+
+.pane-section .buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 5px;
+}
+
+.pane-button {
+  display: flex;
+  align-items: center;
+  background-color: #444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  width: 100%;
+}
+
+.pane-button:hover {
+  background-color: #555;
+}
+
+.pane-button.active {
+  background-color: #4caf50;
+}
+
+.pane-button .icon {
+  font-size: 20px;
+  margin-right: 10px;
+}
+
+.pane-button .label {
+  font-size: 14px;
+}

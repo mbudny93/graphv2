@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
-import Toolbar from './components/Toolbar';
+import LeftPane from './components/LeftPane';
 import GraphCanvas from './components/GraphCanvas';
 import PropertiesPane from './components/PropertiesPane';
 
@@ -43,8 +43,8 @@ function App() {
 
   return (
     <div className="App">
-      <Toolbar mode={mode} setMode={setMode} getGraphState={getGraphState} />
       <div className="main-content">
+        <LeftPane mode={mode} setMode={setMode} getGraphState={getGraphState} />
         <div className="canvas-container">
           <GraphCanvas 
             ref={graphCanvasRef}
