@@ -59,6 +59,7 @@ const LeftPane = ({ mode, setMode, getGraphState }) => {
   const operationModes = [
     { id: 'select', label: 'Select', icon: '👆' },
     { id: 'connect', label: 'Connect', icon: '↔️' },
+    { id: 'connectBidirectional', label: 'Connect Bidirectional', icon: '⟷' },
     { id: 'delete', label: 'Delete', icon: '🗑️' }
   ];
   

@@ -52,12 +52,261 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
       case 'connect':
         handleConnectClick(x, y);
         break;
+      case 'connectBidirectional':
+        handleConnectBidirectionalClick(x, y);
+        break;
       case 'delete':
         console.log('Delete mode in handleCanvasClick - skipping to avoid duplication');
         break;
       default:
         break;
     }
+  };
+
+  // Handle clicks in bidirectional connect mode
+  const handleConnectBidirectionalClick = (x, y) => {
+    const node = findNodeAtPosition(x, y);
+
+    if (node) {
+      if (!pendingConnection) {
+        // First node click - start connection
+        setConnectStartNode(node);
+        setPendingConnection(true);
+      } else if (connectStartNode && node.id !== connectStartNode.id) {
+        // Second node click - complete bidirectional connection if it's a different node
+        
+        // Check if either node is a Bank node
+        const isSourceBank = connectStartNode.type === 'bank';
+        const isTargetBank = node.type === 'bank';
+
+        // If neither node is a Bank node, prevent the connection
+        if (!isSourceBank && !isTargetBank) {
+          setError('Error: Cannot connect non-Bank nodes to each other');
+          setTimeout(() => setError(null), 3000);
+          setPendingConnection(false);
+          setConnectStartNode(null);
+          return;
+        }
+
+        // Check if trying to connect a Bank node with a Projection node
+        const isProjectionConnection =
+          (connectStartNode.type === 'bank' && node.type === 'projection') ||
+          (connectStartNode.type === 'projection' && node.type === 'bank');
+
+        if (isProjectionConnection) {
+          // Determine which node is which
+          const bankNode = connectStartNode.type === 'bank' ? connectStartNode : node;
+          const projectionNode = connectStartNode.type === 'projection' ? connectStartNode : node;
+
+          // Extract the entity from the Projection node name (4 characters after PRJ_)
+          const projectionNameParts = projectionNode.properties.name.split('_');
+          const projectionEntity = projectionNameParts.length > 1 ? projectionNameParts[1] : '';
+
+          // Compare with the Bank node's entity property
+          if (projectionEntity !== bankNode.properties.entity) {
+            setError(`Error: Projection entity (${projectionEntity}) must match Bank entity (${bankNode.properties.entity})`);
+            setTimeout(() => setError(null), 3000);
+            setPendingConnection(false);
+            setConnectStartNode(null);
+            return;
+          }
+        }
+
+        // Create connections in both directions
+        const sourceToTargetExists = edges.some(
+          edge => edge.source === connectStartNode.id && edge.target === node.id
+        );
+
+        const targetToSourceExists = edges.some(
+          edge => edge.source === node.id && edge.target === connectStartNode.id
+        );
+
+        const newEdges = [];
+
+        // Create first direction edge (source -> target) if it doesn't exist
+        if (!sourceToTargetExists) {
+          // Create the first direction edge
+          const firstEdge = createEdge(connectStartNode, node);
+          newEdges.push(firstEdge);
+        }
+
+        // Create second direction edge (target -> source) if it doesn't exist
+        if (!targetToSourceExists) {
+          // Create the second direction edge
+          const secondEdge = createEdge(node, connectStartNode);
+          newEdges.push(secondEdge);
+        }
+
+        // Apply node property updates for both connections
+        let updatedNodes = [...nodes];
+
+        // Check for special node connections and update node properties
+        const isBankToCreditLine =
+          (connectStartNode.type === 'bank' && node.type === 'creditLine') ||
+          (node.type === 'bank' && connectStartNode.type === 'creditLine');
+
+        const isBankToProjection =
+          (connectStartNode.type === 'bank' && node.type === 'projection') ||
+          (node.type === 'projection' && connectStartNode.type === 'bank');
+
+        const isBankToStreet =
+          (connectStartNode.type === 'bank' && node.type === 'street') ||
+          (node.type === 'street' && connectStartNode.type === 'bank');
+
+        if (isBankToCreditLine) {
+          // Determine which node is which
+          const bankNode = connectStartNode.type === 'bank' ? connectStartNode : node;
+          const creditLineNode = connectStartNode.type === 'creditLine' ? connectStartNode : node;
+
+          // Update the Bank node's creditLine property
+          updatedNodes = updatedNodes.map((n) => {
+            if (n.id === bankNode.id) {
+              return {
+                ...n,
+                properties: {
+                  ...n.properties,
+                  creditLine: creditLineNode.properties.name,
+                },
+              };
+            }
+            return n;
+          });
+        } else if (isBankToProjection) {
+          // Determine which node is which
+          const bankNode = connectStartNode.type === 'bank' ? connectStartNode : node;
+
+          // Update the Bank node's projectionAware property
+          updatedNodes = updatedNodes.map((n) => {
+            if (n.id === bankNode.id) {
+              return {
+                ...n,
+                properties: {
+                  ...n.properties,
+                  projectionAware: true,
+                },
+              };
+            }
+            return n;
+          });
+        } else if (isBankToStreet) {
+          // Determine which node is which
+          const bankNode = connectStartNode.type === 'bank' ? connectStartNode : node;
+
+          // Update the Bank node's streetCover property
+          updatedNodes = updatedNodes.map((n) => {
+            if (n.id === bankNode.id) {
+              return {
+                ...n,
+                properties: {
+                  ...n.properties,
+                  streetCover: true,
+                },
+              };
+            }
+            return n;
+          });
+        }
+
+        // Update nodes state
+        setNodes(updatedNodes);
+
+        // Update selected node if it was modified
+        if (selectedNode) {
+          const nodeTypes = [connectStartNode.type, node.type];
+          if (nodeTypes.includes('bank') && (nodeTypes.includes('creditLine') || nodeTypes.includes('projection') || nodeTypes.includes('street'))) {
+            const bankNodeId = connectStartNode.type === 'bank' ? connectStartNode.id : node.id;
+            if (selectedNode.id === bankNodeId) {
+              const updatedNode = updatedNodes.find((n) => n.id === bankNodeId);
+              setSelectedNode(updatedNode);
+              setSelectedElement({ type: 'node', data: updatedNode });
+            }
+          }
+        }
+
+        // Add the new edges to the existing edges
+        if (newEdges.length > 0) {
+          setEdges([...edges, ...newEdges]);
+        }
+
+        // Reset connection state
+        setConnectStartNode(null);
+        setPendingConnection(false);
+      } else if (connectStartNode && node.id === connectStartNode.id) {
+        // Clicked the same node twice, cancel the connection
+        setConnectStartNode(null);
+        setPendingConnection(false);
+      }
+    } else {
+      // Clicked on empty space, cancel the connection
+      setConnectStartNode(null);
+      setPendingConnection(false);
+    }
+  };
+
+  // Helper function to create an edge with appropriate properties
+  const createEdge = (sourceNode, targetNode) => {
+    // Generate a unique ID for the edge
+    const edgeId = `${sourceNode.id}-${targetNode.id}`;
+
+    // Create a default flowId based on the node types
+    let flowId = 'FLOW_' + Date.now().toString();
+
+    // Check for special node connections
+    const isBankToCreditLine =
+      (sourceNode.type === 'bank' && targetNode.type === 'creditLine') ||
+      (sourceNode.type === 'creditLine' && targetNode.type === 'bank');
+
+    const isBankToProjection =
+      (sourceNode.type === 'bank' && targetNode.type === 'projection') ||
+      (sourceNode.type === 'projection' && targetNode.type === 'bank');
+
+    const isBankToStreet =
+      (sourceNode.type === 'bank' && targetNode.type === 'street') ||
+      (sourceNode.type === 'street' && targetNode.type === 'bank');
+
+    // Set appropriate flowId based on connection type
+    if (sourceNode.type === 'bank' && targetNode.type === 'creditLine') {
+      flowId = `${sourceNode.properties.bankId}_${targetNode.properties.name}`;
+    } else if (targetNode.type === 'bank' && sourceNode.type === 'creditLine') {
+      flowId = `${targetNode.properties.bankId}_${sourceNode.properties.name}`;
+    } else if (sourceNode.type === 'bank' && targetNode.type === 'projection') {
+      flowId = `${sourceNode.properties.bankId}_${targetNode.properties.name}`;
+    } else if (targetNode.type === 'bank' && sourceNode.type === 'projection') {
+      flowId = `${targetNode.properties.bankId}_${sourceNode.properties.name}`;
+    } else if (sourceNode.type === 'bank' && targetNode.type === 'street') {
+      flowId = `${sourceNode.properties.bankId}_STREET`;
+    } else if (targetNode.type === 'bank' && sourceNode.type === 'street') {
+      flowId = `${targetNode.properties.bankId}_STREET`;
+    } else {
+      // For other connections, use bankIds if available
+      const sourceId = sourceNode.properties.bankId || (sourceNode.properties.name || 'NODE');
+      const targetId = targetNode.properties.bankId || (targetNode.properties.name || 'NODE');
+      flowId = `${sourceId}_${targetId}`;
+    }
+
+    // Determine the appropriate cost based on connection type
+    let cost = 4; // Default cost
+
+    // Bank to Credit Line or Projection Node: cost = 1
+    if (isBankToCreditLine || isBankToProjection) {
+      cost = 1;
+    }
+    // Bank to Street Node: cost = 1000
+    else if (isBankToStreet) {
+      cost = 1000;
+    }
+
+    // Create and return the edge object
+    return {
+      id: edgeId,
+      source: sourceNode.id,
+      target: targetNode.id,
+      properties: {
+        flowId: flowId,
+        cost: cost,
+        flowType: 'INTRABANK',
+      },
+    };
   };
 
   // Handle clicks in connect mode
@@ -266,16 +515,7 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
             cost = 1000;
           }
 
-          const newEdge = {
-            id: `${connectStartNode.id}-${node.id}`,
-            source: connectStartNode.id,
-            target: node.id,
-            properties: {
-              flowId: flowId,
-              cost: cost,
-              flowType: 'INTRABANK',
-            },
-          };
+          const newEdge = createEdge(connectStartNode, node);
           setEdges([...edges, newEdge]);
         }
 
