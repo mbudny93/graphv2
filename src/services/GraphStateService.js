@@ -102,7 +102,18 @@ class GraphStateService {
    * @returns {Array} - Updated array of nodes
    */
   updateNodeProperties(nodes, nodeId, updatedProperties) {
-    return nodes.map(node => {
+    // Find the node being updated
+    const nodeToUpdate = nodes.find(node => node.id === nodeId);
+    if (!nodeToUpdate) return nodes;
+    
+    // Check if this is a credit line node and the name is being updated
+    const isCreditLineNameChange = 
+      nodeToUpdate.type === NODE_TYPES.CREDIT_LINE && 
+      updatedProperties.name && 
+      updatedProperties.name !== nodeToUpdate.properties.name;
+    
+    // Update the node itself
+    let updatedNodes = nodes.map(node => {
       if (node.id === nodeId) {
         return {
           ...node,
@@ -114,6 +125,29 @@ class GraphStateService {
       }
       return node;
     });
+    
+    // If a credit line name is being changed, update all connected bank nodes
+    if (isCreditLineNameChange) {
+      const oldName = nodeToUpdate.properties.name;
+      const newName = updatedProperties.name;
+      
+      // Update all bank nodes that have this credit line
+      updatedNodes = updatedNodes.map(node => {
+        if (node.type === NODE_TYPES.BANK && 
+            node.properties.creditLine === oldName) {
+          return {
+            ...node,
+            properties: {
+              ...node.properties,
+              creditLine: newName
+            }
+          };
+        }
+        return node;
+      });
+    }
+    
+    return updatedNodes;
   }
 
   /**
