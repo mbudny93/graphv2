@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './LeftPane.css';
 import StateModal from './StateModal';
+import axios from 'axios';
 
 const LeftPane = ({ mode, setMode, getGraphState }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [graphState, setGraphState] = useState(null);
+  const [connectivityStatus, setConnectivityStatus] = useState(null);
   const leftPaneRef = useRef(null);
   const isResizingRef = useRef(false);
   
@@ -17,6 +19,20 @@ const LeftPane = ({ mode, setMode, getGraphState }) => {
   
   const closeModal = () => {
     setIsModalOpen(false);
+  };
+  
+  const testConnectivity = async () => {
+    try {
+      setConnectivityStatus('Testing...');
+      const response = await axios.get('http://localhost:8080/testConnectivity');
+      setConnectivityStatus(`Success: ${response.data}`);
+      // Clear status after 5 seconds
+      setTimeout(() => setConnectivityStatus(null), 5000);
+    } catch (error) {
+      setConnectivityStatus(`Error: ${error.message}`);
+      // Clear error after 5 seconds
+      setTimeout(() => setConnectivityStatus(null), 5000);
+    }
   };
 
   // Set up resize handlers
@@ -120,6 +136,19 @@ const LeftPane = ({ mode, setMode, getGraphState }) => {
                 <span className="icon">📋</span>
                 <span className="label">State</span>
               </button>
+              <button
+                className="pane-button"
+                onClick={testConnectivity}
+                title="Test Connectivity"
+              >
+                <span className="icon">🔌</span>
+                <span className="label">Connectivity Test</span>
+              </button>
+              {connectivityStatus && (
+                <div className="connectivity-status">
+                  {connectivityStatus}
+                </div>
+              )}
             </div>
           </div>
         </div>
