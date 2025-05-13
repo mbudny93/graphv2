@@ -1086,32 +1086,39 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
         const midX = (startX + endX) / 2;
         const midY = (startY + endY) / 2;
 
-        // Only display the cost as an integer
+        // Only display the cost as an integer and only for one direction in bidirectional connections
         if (edge.properties && edge.properties.cost !== undefined) {
-          const cost = Math.round(edge.properties.cost);
-          const costText = `${cost}`;
+          // For bidirectional connections, only show cost on one edge
+          // If there's a reverse edge, only show cost if this edge's source ID is less than target ID
+          // This ensures we only show the cost once for each bidirectional connection
+          const shouldShowCost = !reverseEdge || (reverseEdge && edge.source < edge.target);
+          
+          if (shouldShowCost) {
+            const cost = Math.round(edge.properties.cost);
+            const costText = `${cost}`;
 
-          // Adjust font size based on zoom, but keep it readable
-          const baseFontSize = 14;
-          const dynamicFontSize = Math.max(8, baseFontSize / zoomLevel); // Ensure min font size
+            // Adjust font size based on zoom, but keep it readable
+            const baseFontSize = 14;
+            const dynamicFontSize = Math.max(8, baseFontSize / zoomLevel); // Ensure min font size
 
-          ctx.font = `bold ${dynamicFontSize}px Arial`;
+            ctx.font = `bold ${dynamicFontSize}px Arial`;
 
-          const textMetrics = ctx.measureText(costText);
-          const textWidth = textMetrics.width;
-          const textHeight = dynamicFontSize; // Approximate height based on font size
+            const textMetrics = ctx.measureText(costText);
+            const textWidth = textMetrics.width;
+            const textHeight = dynamicFontSize; // Approximate height based on font size
 
-          // Draw label background
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-          // Adjust padding for background based on font size
-          const padding = 3 / zoomLevel;
-          ctx.fillRect(midX - textWidth / 2 - padding, midY - textHeight / 2 - padding, textWidth + 2 * padding, textHeight + 2 * padding);
+            // Draw label background
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            // Adjust padding for background based on font size
+            const padding = 3 / zoomLevel;
+            ctx.fillRect(midX - textWidth / 2 - padding, midY - textHeight / 2 - padding, textWidth + 2 * padding, textHeight + 2 * padding);
 
-          // Draw cost label
-          ctx.fillStyle = selectedEdge && edge.id === selectedEdge.id ? '#1976d2' : '#333';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(costText, midX, midY);
+            // Draw cost label
+            ctx.fillStyle = selectedEdge && edge.id === selectedEdge.id ? '#1976d2' : '#333';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(costText, midX, midY);
+          }
         }
       }
     });
