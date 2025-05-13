@@ -1,21 +1,24 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import './GraphCanvas.css';
 
+// Import components
+import GraphErrorDisplay from './GraphErrorDisplay';
+
 // Import constants
-import { NODE_RADIUS, OPERATION_MODES, NODE_TYPES } from '../../utils/GraphConstants';
+import { OPERATION_MODES, NODE_TYPES } from '../../utils/GraphConstants';
 
 // Import utilities
 import { screenToWorldCoordinates } from '../../utils/GraphMathUtils';
 import graphRenderer from '../../utils/GraphRenderer';
+import graphNodeManager from '../../utils/GraphNodeManager';
+import graphConnectionManager from '../../utils/GraphConnectionManager';
+import graphInteractionHandler from '../../utils/GraphInteractionHandler';
 
 // Import services
 import graphStateService from '../../services/GraphStateService';
-import graphAPIService from '../../services/GraphAPIService';
 
 // Import operations
-import nodeCreator from '../../operations/NodeCreator';
 import nodeSelector from '../../operations/NodeSelector';
-import nodeConnector from '../../operations/NodeConnector';
 import nodeDeleter from '../../operations/NodeDeleter';
 
 const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
@@ -61,12 +64,18 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
     }
   }, [mode]);
 
+  // Handle clicks in select mode
+  const handleSelectClick = (x, y) => {
+    nodeSelector.selectNodeAtPosition(
+      x, y, nodes, edges, setSelectedNode, setSelectedEdge, setSelectedElement
+    );
+  };
+
   // Handle canvas click based on the current mode
   const handleCanvasClick = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
-    // Convert screen coordinates to world coordinates
     const worldCoords = screenToWorldCoordinates(
       e.clientX - rect.left,
       e.clientY - rect.top,
@@ -92,9 +101,7 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
         addStreetNode(x, y);
         break;
       case OPERATION_MODES.SELECT:
-        nodeSelector.selectNodeAtPosition(
-          x, y, nodes, edges, setSelectedNode, setSelectedEdge, setSelectedElement
-        );
+        handleSelectClick(x, y);
         break;
       case OPERATION_MODES.CONNECT:
         handleConnectClick(x, y);
@@ -103,7 +110,7 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
         handleConnectBidirectionalClick(x, y);
         break;
       case OPERATION_MODES.DELETE:
-        handleDeleteClick(x, y);
+        // Delete is handled in mouseDown to avoid conflicts with dragging
         break;
       default:
         break;
@@ -112,80 +119,18 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
 
   // Handle clicks in connect mode
   const handleConnectClick = (x, y) => {
-    const node = nodeSelector.findNodeAtPosition(x, y, nodes);
-
-    if (node) {
-      if (!pendingConnection) {
-        // First node click - start connection
-        setConnectStartNode(node);
-        setPendingConnection(true);
-      } else if (connectStartNode && node.id !== connectStartNode.id) {
-        // Second node click - complete connection if it's a different node
-        nodeConnector.connectNodes(
-          connectStartNode,
-          node,
-          nodes,
-          edges,
-          setNodes,
-          setEdges,
-          setError,
-          selectedNode,
-          setSelectedNode,
-          setSelectedElement
-        );
-        
-        // Reset connection state
-        setConnectStartNode(null);
-        setPendingConnection(false);
-      } else if (connectStartNode && node.id === connectStartNode.id) {
-        // Clicked the same node twice, cancel the connection
-        setConnectStartNode(null);
-        setPendingConnection(false);
-      }
-    } else {
-      // Clicked on empty space, cancel the connection
-      setConnectStartNode(null);
-      setPendingConnection(false);
-    }
+    graphConnectionManager.handleConnectClick(
+      x, y, nodes, edges, connectStartNode, setConnectStartNode,
+      pendingConnection, setPendingConnection, setError, setEdges, setNodes
+    );
   };
 
   // Handle clicks in bidirectional connect mode
   const handleConnectBidirectionalClick = (x, y) => {
-    const node = nodeSelector.findNodeAtPosition(x, y, nodes);
-
-    if (node) {
-      if (!pendingConnection) {
-        // First node click - start connection
-        setConnectStartNode(node);
-        setPendingConnection(true);
-      } else if (connectStartNode && node.id !== connectStartNode.id) {
-        // Second node click - complete bidirectional connection if it's a different node
-        nodeConnector.connectNodesBidirectional(
-          connectStartNode,
-          node,
-          nodes,
-          edges,
-          setNodes,
-          setEdges,
-          setError,
-          selectedNode,
-          setSelectedNode,
-          setSelectedElement
-        );
-        
-        // Reset connection state
-        setConnectStartNode(null);
-        setPendingConnection(false);
-      } else if (connectStartNode && node.id === connectStartNode.id) {
-        // Clicked the same node twice, cancel the connection
-        setConnectStartNode(null);
-        setPendingConnection(false);
-      }
-    } else {
-      // Clicked on empty space, cancel the connection
-      setConnectStartNode(null);
-      setPendingConnection(false);
-    }
+    graphConnectionManager.handleConnectBidirectionalClick(
+      x, y, nodes, edges, connectStartNode, setConnectStartNode,
+      pendingConnection, setPendingConnection, setError, setEdges, setNodes
+    );
   };
 
   // Handle clicks in delete mode
@@ -203,165 +148,41 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
     }
   };
 
-  // Check if a node name already exists
-  const isNodeNameUnique = (name) => {
-    return !nodes.some(node => {
-      // Check against bankId for bank nodes
-      if (node.type === NODE_TYPES.BANK && node.properties.bankId === name) {
-        return true;
-      }
-      // Check against name property for other node types
-      if (node.properties.name === name) {
-        return true;
-      }
-      return false;
-    });
-  };
-
   // Add a new Bank node at the specified position
   const addBankNode = (x, y) => {
-    // Generate a unique bank ID
-    let bankId;
-    let counter = nextBankId;
-    
-    do {
-      bankId = `BANK${counter}`;
-      counter++;
-    } while (!isNodeNameUnique(bankId));
-    
-    const newNode = nodeCreator.createBankNode(x, y, counter - 1);
-    setNextBankId(counter);
-    setNodes([...nodes, newNode]);
+    graphNodeManager.addBankNode(x, y, nodes, nextBankId, setNodes, setNextBankId, setError);
   };
 
   // Add a new Credit Line node at the specified position
   const addCreditLineNode = (x, y) => {
-    // Generate a unique credit line ID
-    let clId;
-    let counter = nextCreditLineId;
-    
-    do {
-      clId = `CL${counter}`;
-      counter++;
-    } while (!isNodeNameUnique(clId));
-    
-    const newNode = nodeCreator.createCreditLineNode(x, y, counter - 1);
-    setNextCreditLineId(counter);
-    setNodes([...nodes, newNode]);
+    graphNodeManager.addCreditLineNode(x, y, nodes, nextCreditLineId, setNodes, setNextCreditLineId, setError);
   };
 
   // Add a new Projection node at the specified position
   const addProjectionNode = (x, y) => {
-    // Generate a unique projection ID
-    let projName;
-    let counter = nextProjectionId;
-    
-    do {
-      projName = `PRJ_ENT${counter}`;
-      counter++;
-    } while (!isNodeNameUnique(projName));
-    
-    const newNode = nodeCreator.createProjectionNode(x, y, counter - 1);
-    setNextProjectionId(counter);
-    setNodes([...nodes, newNode]);
+    graphNodeManager.addProjectionNode(x, y, nodes, nextProjectionId, setNodes, setNextProjectionId, setError);
   };
 
   // Add a new Street node at the specified position
   const addStreetNode = (x, y) => {
-    // Check if a street node already exists
-    const streetNodeExists = nodes.some(node => node.type === NODE_TYPES.STREET);
-    
-    if (streetNodeExists) {
-      setError('Error: Only one Street node is allowed');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-    
-    // Generate a unique street ID
-    let streetId;
-    let counter = nextStreetId;
-    
-    do {
-      streetId = `STREET${counter}`;
-      counter++;
-    } while (!isNodeNameUnique(streetId));
-    
-    const newNode = nodeCreator.createStreetNode(x, y, counter - 1);
-    setNextStreetId(counter);
-    setNodes([...nodes, newNode]);
+    graphNodeManager.addStreetNode(x, y, nodes, nextStreetId, setNodes, setNextStreetId, setError);
   };
 
   // Handle mouse down for node dragging and panning
   const handleMouseDown = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    const worldCoords = screenToWorldCoordinates(
-      e.clientX - rect.left,
-      e.clientY - rect.top,
-      panOffset.x,
-      panOffset.y,
-      zoomLevel
+    graphInteractionHandler.handleMouseDown(
+      e, canvasRef, mode, nodes, panOffset, zoomLevel,
+      setDraggingNode, setDragStart, setIsPanning, setLastPanPosition, handleDeleteClick
     );
-    
-    const x = worldCoords.x;
-    const y = worldCoords.y;
-
-    const clickedNode = nodeSelector.findNodeAtPosition(x, y, nodes);
-
-    if (mode === OPERATION_MODES.SELECT && clickedNode) {
-      setDraggingNode(clickedNode);
-      setDragStart({ x: x - clickedNode.x, y: y - clickedNode.y });
-    } else if (mode === OPERATION_MODES.SELECT && !clickedNode) {
-      // Start panning if clicking on empty space in select mode
-      setIsPanning(true);
-      setLastPanPosition({ x: e.clientX, y: e.clientY });
-    } else if (mode === OPERATION_MODES.DELETE) {
-      handleDeleteClick(x, y);
-    }
   };
 
   // Handle mouse move for node dragging and panning
   const handleMouseMove = (e) => {
-    if (draggingNode) {
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      
-      const worldCoords = screenToWorldCoordinates(
-        e.clientX - rect.left,
-        e.clientY - rect.top,
-        panOffset.x,
-        panOffset.y,
-        zoomLevel
-      );
-      
-      const x = worldCoords.x;
-      const y = worldCoords.y;
-
-      setNodes(
-        nodes.map((node) =>
-          node.id === draggingNode.id
-            ? { ...node, x: x - dragStart.x, y: y - dragStart.y }
-            : node
-        )
-      );
-
-      // If this node is selected, update the selected node as well
-      if (selectedNode && selectedNode.id === draggingNode.id) {
-        const updatedNode = { 
-          ...selectedNode, 
-          x: x - dragStart.x, 
-          y: y - dragStart.y 
-        };
-        setSelectedNode(updatedNode);
-        setSelectedElement({ type: 'node', data: updatedNode });
-      }
-    } else if (isPanning) {
-      const dx = e.clientX - lastPanPosition.x;
-      const dy = e.clientY - lastPanPosition.y;
-      setPanOffset({ x: panOffset.x + dx, y: panOffset.y + dy });
-      setLastPanPosition({ x: e.clientX, y: e.clientY });
-    }
+    graphInteractionHandler.handleMouseMove(
+      e, canvasRef, draggingNode, dragStart, isPanning, lastPanPosition,
+      panOffset, zoomLevel, nodes, setNodes, selectedNode, setSelectedNode,
+      setSelectedElement, setPanOffset, setLastPanPosition
+    );
   };
 
   // Handle mouse up for node dragging and panning
@@ -372,29 +193,9 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
 
   // Handle mouse wheel for zooming
   const handleWheel = (e) => {
-    e.preventDefault();
-    
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Get mouse position relative to canvas
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    // Calculate world position before zoom
-    const worldX = (mouseX - panOffset.x) / zoomLevel;
-    const worldY = (mouseY - panOffset.y) / zoomLevel;
-    
-    // Determine zoom direction and calculate new zoom level
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoomLevel = Math.max(0.1, Math.min(5, zoomLevel * zoomFactor));
-    
-    // Calculate new pan offset to keep the point under mouse fixed
-    const newPanX = mouseX - worldX * newZoomLevel;
-    const newPanY = mouseY - worldY * newZoomLevel;
-    
-    setZoomLevel(newZoomLevel);
-    setPanOffset({ x: newPanX, y: newPanY });
+    graphInteractionHandler.handleWheel(
+      e, canvasRef, panOffset, zoomLevel, setPanOffset, setZoomLevel
+    );
   };
 
   // Render the graph
@@ -405,90 +206,47 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
     const height = canvas.height;
     
     graphRenderer.drawGraph(
-      ctx, 
-      width, 
-      height, 
-      nodes, 
-      edges, 
-      selectedNode, 
-      selectedEdge, 
-      panOffset, 
-      zoomLevel
+      ctx, width, height, nodes, edges, selectedNode, selectedEdge, panOffset, zoomLevel
     );
   }, [nodes, edges, selectedNode, selectedEdge, panOffset, zoomLevel]);
 
   // Track mouse position for pending connections
   const trackMouse = (e) => {
-    if (pendingConnection) {
-      // Force a redraw when tracking mouse for pending connections
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      const width = canvas.width;
-      const height = canvas.height;
-      
-      graphRenderer.drawGraph(
-        ctx, 
-        width, 
-        height, 
-        nodes, 
-        edges, 
-        selectedNode, 
-        selectedEdge, 
-        panOffset, 
-        zoomLevel
-      );
-      
-      // Draw the pending connection line
-      if (connectStartNode) {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = (e.clientX - rect.left - panOffset.x) / zoomLevel;
-        const mouseY = (e.clientY - rect.top - panOffset.y) / zoomLevel;
-        
-        ctx.save();
-        ctx.translate(panOffset.x, panOffset.y);
-        ctx.scale(zoomLevel, zoomLevel);
-        
-        ctx.beginPath();
-        ctx.moveTo(connectStartNode.x, connectStartNode.y);
-        ctx.lineTo(mouseX, mouseY);
-        ctx.strokeStyle = '#999';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-      }
-    }
+    if (!pendingConnection || !connectStartNode) return;
+    
+    // Force a redraw when tracking mouse for pending connections
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    // Redraw the graph
+    graphRenderer.drawGraph(
+      ctx, canvas.width, canvas.height, nodes, edges, selectedNode, selectedEdge, panOffset, zoomLevel
+    );
+    
+    // Get mouse position in world coordinates
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - panOffset.x) / zoomLevel;
+    const mouseY = (e.clientY - rect.top - panOffset.y) / zoomLevel;
+    
+    // Draw the pending connection line
+    graphConnectionManager.drawPendingConnection(ctx, connectStartNode, mouseX, mouseY, panOffset, zoomLevel);
   };
 
   useEffect(() => {
     window.addEventListener('mousemove', trackMouse);
-    
-    return () => {
-      window.removeEventListener('mousemove', trackMouse);
-    };
+    return () => window.removeEventListener('mousemove', trackMouse);
   }, [pendingConnection, connectStartNode]);
 
   // Resize canvas to match container
   const resizeCanvas = () => {
-    const canvas = canvasRef.current;
-    const container = canvas.parentElement;
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-    
-    // Redraw after resize
-    const ctx = canvas.getContext('2d');
-    graphRenderer.drawGraph(
-      ctx, 
-      canvas.width, 
-      canvas.height, 
-      nodes, 
-      edges, 
-      selectedNode, 
-      selectedEdge, 
-      panOffset, 
-      zoomLevel
-    );
+    const result = graphInteractionHandler.resizeCanvas(canvasRef, nodes, edges, selectedNode, selectedEdge, panOffset, zoomLevel);
+    if (result) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      graphRenderer.drawGraph(
+        ctx, canvas.width, canvas.height, nodes, edges, selectedNode, selectedEdge, panOffset, zoomLevel
+      );
+    }
   };
 
   useEffect(() => {
@@ -579,7 +337,6 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
 
   return (
     <div className="graph-canvas-container">
-      {error && <div className="error-message">{error}</div>}
       <canvas
         ref={canvasRef}
         className="graph-canvas"
@@ -589,6 +346,7 @@ const GraphCanvas = forwardRef(({ mode, setSelectedElement }, ref) => {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
+      {error && <GraphErrorDisplay message={error} />}
     </div>
   );
 });
