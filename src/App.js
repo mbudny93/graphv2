@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import LeftPane from './components/LeftPane';
-import GraphCanvas from './components/GraphCanvas';
+import GraphCanvas from './components/graph/GraphCanvas';
 import PropertiesPane from './components/PropertiesPane';
 
 function App() {
@@ -9,11 +9,20 @@ function App() {
   const [selectedElement, setSelectedElement] = useState(null);
   const graphCanvasRef = useRef(null);
   
+  // Custom mode setter that clears selection when leaving select mode
+  const handleModeChange = (newMode) => {
+    // If we're switching from select mode to another mode, clear the selection
+    if (mode === 'select' && newMode !== 'select') {
+      setSelectedElement(null);
+    }
+    setMode(newMode);
+  };
+  
   // Add keyboard event listener for ESC key
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setMode('select');
+        handleModeChange('select');
       }
     };
     
@@ -44,7 +53,7 @@ function App() {
   return (
     <div className="App">
       <div className="main-content">
-        <LeftPane mode={mode} setMode={setMode} getGraphState={getGraphState} />
+        <LeftPane mode={mode} setMode={handleModeChange} getGraphState={getGraphState} />
         <div className="canvas-container">
           <GraphCanvas 
             ref={graphCanvasRef}

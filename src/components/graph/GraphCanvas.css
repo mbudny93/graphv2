@@ -1,0 +1,44 @@
+.graph-canvas-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.error-message {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(255, 0, 0, 0.8);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 4px;
+  z-index: 1000;
+  font-weight: bold;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: #f8f8f8;
+  cursor: default;
+}
+
+/* Cursor styles for different modes */
+.graph-canvas.mode-select {
+  cursor: default;
+}
+
+.graph-canvas.mode-connect {
+  cursor: crosshair;
+}
+
+.graph-canvas.mode-delete {
+  cursor: no-drop;
+}
+
+.graph-canvas.mode-add {
+  cursor: cell;
+}
