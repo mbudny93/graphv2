@@ -15,7 +15,7 @@ class NodeCreator {
     const bankId = `BANK${nextBankId}`;
     
     return {
-      id: Date.now().toString(),
+      id: `bank-${nextBankId}`,
       x,
       y,
       type: NODE_TYPES.BANK,
@@ -47,7 +47,7 @@ class NodeCreator {
     const clId = `CL${nextCreditLineId}`;
     
     return {
-      id: Date.now().toString(),
+      id: `cl-${nextCreditLineId}`,
       x,
       y,
       type: NODE_TYPES.CREDIT_LINE,
@@ -69,7 +69,7 @@ class NodeCreator {
     const projName = `PRJ_ENT${nextProjectionId}`;
     
     return {
-      id: Date.now().toString(),
+      id: `proj-${nextProjectionId}`,
       x,
       y,
       type: NODE_TYPES.PROJECTION,
@@ -91,7 +91,7 @@ class NodeCreator {
     const streetId = `STREET${nextStreetId}`;
     
     return {
-      id: Date.now().toString(),
+      id: `street-${nextStreetId}`,
       x,
       y,
       type: NODE_TYPES.STREET,
